@@ -1,0 +1,53 @@
+---
+title: "INTRO DHS"
+author: "Javier"
+date: "2024-03-03"
+output: html_document
+---
+
+```{r load-packages}
+library(dplyr)
+library(haven)
+library(labelled)
+```
+
+```{r open-dataSet}
+IRdata <- read_dta("input/data/ZZIR62FL.DTA")
+
+```
+```{r}
+print_labels(IRdata$v313)
+str(IRdata$v313)
+```
+
+```{r}
+IRdata <- IRdata %>% mutate(modfp = case_when(v313 == 3 ~ 1,
+                                    v313 <3 ~ 0)) %>% 
+  set_value_labels(modfp = c(yes = 1, no = 0)) %>% 
+  set_variable_labels(modfp = "Currenly used any moder method")
+
+table(IRdata$v313)
+str(IRdata$modfp)
+  
+```
+```{r}
+IRdata$wt <- IRdata$v005 / 1000000
+
+```
+```{r}
+library(survey)
+mysurvey <- svydesign(id=~v021,
+                      data = IRdata,
+                      strata = ~v022,
+                      weights = ~wt,
+                      nest = T) 
+options(survey.lonely.psu = "adjust")
+
+```
+
+```{r}
+attach(IRdata)
+
+svytable(~modfp, mysurvey)
+```
+

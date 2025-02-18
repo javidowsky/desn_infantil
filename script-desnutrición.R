@@ -1,0 +1,105 @@
+
+
+library(tidyverse)
+library(labelled)
+encuesta <- readRDS("output/data_proc.rds")
+
+print_labels(encuesta$SHREGION)
+print_labels(encuesta$HV025)
+
+encuesta <- encuesta %>% 
+  mutate(AMBITO = case_when(SHREGION == 1 ~ 1,
+                    SHREGION == 2 ~ 2,
+                    SHREGION == 3 & HV025 == 1 ~ 3,
+                    SHREGION == 3 & HV025 == 2 ~ 4,
+                    SHREGION == 4 & HV025 == 1 ~ 5,
+                    SHREGION == 4 & HV025 == 2 ~ 6)) %>% 
+  set_value_labels(AMBITO = c("Lima Metropolitana" = 1,
+                              "Resto Costa" = 2,
+                              "Sierra Urbana" = 3,
+                              "Sierra Rural" = 4,
+                              "Selva Urbana" = 5,
+                              "Selva Rural" = 6)) %>%
+  set_variable_labels(AMBITO = "Dominio Geografico")
+
+library(sjmisc)
+
+frq(encuesta$HC70)
+
+print_labels(encuesta$HV103)
+
+encuesta <-encuesta %>% 
+  mutate(desnwho = case_when(HV103 == 1 & HC70 < -200 ~ 1,
+                              HV103 == 1 & (HC70 >= -200 & HC70 < 601) ~ 0)) %>%
+  set_value_labels(desnwho = c("Con desnutrición crónica" = 1,
+                                "Sin desnutrición crónica" = 0)) %>%
+  set_variable_labels(desnwho = "Desnutrición crónica <5 años")
+
+encuesta <-encuesta %>% 
+  mutate(desn_sev = case_when(HV103 == 1 & HC70 < -300 ~ 1,
+                            HV103 == 1 & (HC70 >= -300 & HC70 < 601) ~ 0)) %>%
+  set_value_labels(desn_sev = c("Con desnutrición crónica severa" = 1,
+                              "Sin desnutrición crónica severa" = 0)) %>%
+  set_variable_labels(desn_sev = "Desnutrición crónica severa <5 años")
+
+# sjt.xtab(encuesta$HV025, encuesta$deswho,
+#          weight.by = encuesta$PESO, 
+#          show.row.prc = TRUE,
+#          title = "Desnutrición Crónica",
+#          digits = 4,
+#          encoding = "UTF-8")
+
+data_desn <- na.omit(encuesta)
+
+library(survey)
+library(srvyr)
+options(survey.lonely.psu = "adjust")
+
+diseno <- data_desn %>% 
+  as_survey_design(
+    strata = HV022,
+    ids = HV001,
+    weights = PESO,
+    nest = TRUE
+  )
+
+# resultados <- svyciprop(~desnwho, design = diseno, na.rm =TRUE, method = "xlogit",
+#                         digits = 4)
+# resultados
+
+prop_desn <- diseno %>% 
+  group_by(desnwho) %>% 
+  summarise(
+    prop = survey_mean(vartype = c("se", "ci"),
+                       proportion = TRUE)
+  )
+  
+prop_desn
+
+diseno %>% 
+  group_by(HV025, desnwho) %>% 
+  summarise(
+    prop = survey_mean(vartype = c("se", "ci"),
+                       proportion = TRUE)
+  ) %>% 
+  data.frame()
+  
+
+diseno %>% 
+  group_by(AMBITO, desnwho) %>% 
+  summarise(
+    prop = survey_mean(vartype = c("se", "ci"),
+                       proportion = TRUE)
+  )
+
+desn_region <- diseno %>% 
+  group_by(HV024, desnwho) %>% 
+  summarise(
+    prop = survey_mean(vartype = c("se", "ci"),
+                       proportion = TRUE)
+  ) %>% 
+  tibble()
+
+desn_region$HV024 <- as_factor(desn_region$HV024)
+
+frq(data_desn$HV103)

@@ -1,0 +1,171 @@
+---
+title: "Desnutrición crónica  en el Perú - 2021"
+author: "Javier"
+date: "2024-03-06"
+output: html_document
+---
+
+```{r load-libraries}
+
+library(tidyverse)
+library(haven)
+library(survey)
+library(srvyr)
+library(labelled)
+library(sjmisc)
+library(sjPlot)
+```
+
+```{r import-data-and-select}
+#Las variables se refieren a las principales características del hogar:
+
+rech0 <- read_dta("input/data/RECH0.dta") %>% 
+  select(HV005, HHID, HV001, HV022, HV024, HV025) %>% 
+  arrange(HHID)
+
+#Contiene información de cada una de las personas incluidas en la lista de los miembros del hogar
+
+rech1 <- read_dta("input/data/RECH1.dta") %>% 
+  select(HHID, HC0 = HVIDX, HV103) %>% 
+  arrange(HHID, HC0)
+
+#Contiene información sobre la cobertura de seguros de salud, actividades de las personas (6+) y educación
+
+rech4 <- read_dta("input/data/RECH4.dta") %>% 
+  select(HHID, HC0 = IDXH4) %>% 
+  arrange(HHID, HC0)
+
+#Características de la vivienda
+
+rech23 <- read_dta("input/data/RECH23.dta") %>% 
+  select(HHID, SHREGION) %>% 
+  arrange(HHID)
+
+#Contiene información antropometra
+
+rech6 <- read_dta("input/data/RECH6.dta") %>% 
+  select(HHID, HC0, HC70, HC71 , HC72) %>% 
+  arrange(HHID, HC0)
+```
+
+```{r merge-data}
+
+rech0_rech23 <- rech0 %>% 
+                inner_join(rech23, by = "HHID")
+
+rech1_rech4_rech6 <-rech1 %>% inner_join(rech4, by = c("HHID", "HC0")) %>% 
+          full_join(rech6, by = c("HHID", "HC0"))
+
+data_proc <-rech1_rech4_rech6 %>% full_join(rech0_rech23, by = "HHID")
+```
+
+```{r create-variable}
+data_proc <-mutate(data_proc, PESO = HV005 / 1000000)
+```
+
+```{r}
+data_proc <- data_proc %>% 
+  mutate(AMBITO = case_when(SHREGION == 1 ~ 1,
+                    SHREGION == 2 ~ 2,
+                    SHREGION == 3 & HV025 == 1 ~ 3,
+                    SHREGION == 3 & HV025 == 2 ~ 4,
+                    SHREGION == 4 & HV025 == 1 ~ 5,
+                    SHREGION == 4 & HV025 == 2 ~ 6)) %>% 
+  set_value_labels(AMBITO = c("Lima Metropolitana" = 1,
+                              "Resto Costa" = 2,
+                              "Sierra Urbana" = 3,
+                              "Sierra Rural" = 4,
+                              "Selva Urbana" = 5,
+                              "Selva Rural" = 6)) %>%
+  set_variable_labels(AMBITO = "Dominio Geografico")
+```
+
+```{r}
+data_proc %>% descr(HC70,HC71, HC72)
+```
+
+```{r}
+
+```
+
+```{r}
+data_proc <- data_proc %>%
+  mutate(nt_ch_stunt = case_when(
+             HV103==1 &  HC70< -200  ~ 1 ,
+             HV103==1 &  HC70>= -200 & HC70<9996 ~ 0 ,
+             TRUE ~ NA_real_ )) %>%
+  set_value_labels(nt_ch_stunt = c("Si" = 1, "No"=0  )) %>%
+  set_variable_labels(nt_ch_stunt = "Desnutrición crónica total OMS")
+```
+
+```{r}
+data_proc <- data_proc %>%
+  mutate(nt_ch_sev_stunt = case_when(
+             HV103==1 &  HC70< -300  ~ 1 ,
+             HV103==1 &  HC70>= -300 & HC70<9996 ~ 0 ,
+             TRUE ~ NA_real_ )) %>%
+  set_value_labels(nt_ch_sev_stunt = c("Si" = 1, "No"=0  )) %>%
+  set_variable_labels(nt_ch_sev_stunt = "Desnutrición crónica severa OMS")
+```
+
+```{r desn-aguda}
+data_proc <- data_proc %>%
+  mutate(nt_ch_wast = case_when(
+             HV103==1 &  HC72< -200  ~ 1 ,
+             HV103==1 &  HC72>= -200 & HC72<9996 ~ 0 ,
+             TRUE ~ NA_real_ )) %>%
+  set_value_labels(nt_ch_wast = c("Si" = 1, "No"=0  )) %>%
+  set_variable_labels(nt_ch_wast = "Desnutrición aguda total OMS")
+
+data_proc <- data_proc %>%
+  mutate(nt_ch_sev_wast = case_when(
+             HV103==1 &  HC72< -300  ~ 1 ,
+             HV103==1 &  HC72>= -300 & HC72<9996 ~ 0 ,
+             TRUE ~ NA_real_ )) %>%
+  set_value_labels(nt_ch_sev_wast = c("Si" = 1, "No"=0  )) %>%
+  set_variable_labels(nt_ch_sev_wast = "Desnutrición aguda severa total OMS")
+```
+
+```{r desn-global}
+data_proc <- data_proc %>%
+  mutate(nt_ch_underwt = case_when(
+             HV103==1 &  HC71< -200  ~ 1 ,
+             HV103==1 &  HC71>= -200 & HC71<9996 ~ 0 ,
+             TRUE ~ NA_real_ )) %>%
+  set_value_labels(nt_ch_underwt = c("Si" = 1, "No"=0  )) %>%
+  set_variable_labels(nt_ch_underwt = "Desnutrición global total OMS")
+
+data_proc <- data_proc %>%
+  mutate(nt_ch_sev_underwt = case_when(
+             HV103==1 &  HC71< -300  ~ 1 ,
+             HV103==1 &  HC71>= -300 & HC71<9996 ~ 0 ,
+             TRUE ~ NA_real_ )) %>%
+  set_value_labels(nt_ch_sev_underwt = c("Si" = 1, "No"=0  )) %>%
+  set_variable_labels(nt_ch_sev_underwt = "Desnutrición aguda severa total OMS")
+```
+
+```{r}
+options(survey.lonely.psu = "adjust")
+
+diseno <- data_desn %>% 
+  as_survey_design(
+    strata = HV022,
+    ids = HV001,
+    weights = PESO,
+    nest = TRUE
+  )
+```
+
+```{r}
+data_desn <- na.omit(data_proc)
+```
+
+```{r}
+diseno %>% 
+  group_by(HV025, nt_ch_wast) %>% 
+  summarise(
+    prop = survey_mean(vartype = c("se", "ci"),
+                       proportion = TRUE)
+  ) %>% 
+  forcats::as_factor(.)
+```
